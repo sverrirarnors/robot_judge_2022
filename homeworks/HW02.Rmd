@@ -1,0 +1,104 @@
+---
+title: "BRJ HW02"
+author: "Sverrir Arnórsson"
+date: "2022-10-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+In this homework you will investigate the *causal* of being part of a union on the number of hours worked. You will work with data from the National Longitudinal Survey. In particular, you have a panel of young women who were between 14 and 26 years of age in 1968, surveyed for 20 years.
+
+The purpose of this homework is ot make you think about the **identification** assumptions underlying your empirical strategy, namely the assumptions that allow the coefficient estimate from the regressions to be causal. Throughout the homework you will try to address the issue of **omitted variable bias** through different strategies, that will allow to make milder identification assumptions.
+
+##  Summary statistics
+
+Inspect the data
+
+```{r cars}
+library(tidyverse)
+library(haven)
+library(modelsummary)
+df <- read_dta("https://www.stata-press.com/data/r16/nlswork.dta")
+```
+
+Visualize the dataset
+
+```{r}
+datasummary_skim(df)
+```
+
+Tabulate collage and union status
+
+```{r}
+datasummary_crosstab(collgrad ~ union, data=df)
+```
+
+Generate a variable for log hours worked
+
+```{r}
+df <- df |> mutate(log_hours = log(hours))
+```
+
+Plot log hours against year seperately for union and non-union
+
+```{r}
+df |> 
+  ggplot(aes(x=year, y=log_hours)) +
+  geom_point() +
+  facet_wrap(vars(union))
+```
+
+## Regression: Effect of union status on hours worked
+
+Regress hours worked against union status and display the results
+
+```{r}
+statistics <- c("conf.int",
+                "s.e. = {std.error}", 
+                "t = {statistic}",
+                "p = {p.value}")
+mod_1 <- lm(hours ~ union, data=df)
+modelsummary(mod_1, statistic = statistics)
+```
+
+### What is the identification assumption for the coefficient on union to be causal?
+
+That there are no unobserved confounders that are both correlated with union status and hours worked.
+
+### Add education (collgrad) to the regression and compare the coefficient on union with the previous result
+
+```{r}
+mod_2 <- lm(hours ~ union + collgrad, data=df)
+modelsummary(list("Model 2" = mod_2), statistic = statistics)
+```
+
+By adding this additional control, the value of the coefficient for unions decreases, and its significance as well (but is still very significant). Having a college degree seems to affect one's working hours more than union participation.
+
+```{r}
+mod_3 <- lm(hours ~ union + collgrad + factor(occ_code), data=df)
+modelsummary(list("Model 3" = mod_3), coef_omit = "factor*", statistic = statistics)
+```
+Here we interpret the occupation codes as nominal variables, and omit the coefficients. In this regression, the coefficient for unions decreases again, as well as its t-value (it's still significant though). The same happens for the coefficient for collage graduation.
+
+### In terms of causal inference, why is adding occupation code as a control probably not a good idea?
+
+Because if one is a union worker, they are more likely to be working in certain sectors, and working hours between each sector could be similar.
+
+### What are "good controls" in the dataset in terms of being exogenous to union status?
+
+```{r}
+mod_4 <- lm(hours ~ union + collgrad + race + age + nev_mar, data=df)
+modelsummary(list("Model 4" = mod_4), statistic = statistics)
+```
+
+Adding these controls decreases the magnitude of the coefficient for union participation, but increases the coefficient for collage graduation. They are both still quite significant.
+
+## Short Essay: Correlation/Causation
+
+[This article](https://aish.com/lower-divorce-rate-marry-young-without-living-together/) claims that couples that cohabit before marriage are more likely to divorce than couples that only move in together after marriage. This seems to be based only on simple regression (LPM/probit/logit). An unobserved confounder here might be religion as more religious couples could face more stigma around divorce, and are also often banned from cohabiting pre-marriage.
+
+
+
